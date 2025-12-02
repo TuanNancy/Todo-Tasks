@@ -1,5 +1,13 @@
-export const getAllTasks = (req, res) => {
-  res.status(200).send("tuan dep trai23244423");
+import Task from "../../models/Task.js";
+
+export const getAllTasks = async (req, res) => {
+  try {
+    const tasks = await Task.find();
+    res.status(200).json(tasks);
+  } catch (error) {
+    console.error("loi khi goi getALLTasks", error);
+    res.status(500).json({ message: error.message });
+  }
 };
 
 export const createTask = (req, res) => {
