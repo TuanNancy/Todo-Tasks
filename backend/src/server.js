@@ -51,22 +51,29 @@ app.use("/api/tasks", taskRoute);
 // Serve static files và SPA routing cho production
 if (process.env.NODE_ENV === "production") {
   const frontendDistPath = path.join(__dirname, "../../frontend/dist");
-  app.use(express.static(frontendDistPath));
 
-  // Catch-all handler: gửi về index.html cho mọi route không phải API
-  // Sử dụng middleware thay vì route pattern để tránh lỗi với Express 5.x
-  app.use((req, res, next) => {
-    // Bỏ qua các route API
-    if (req.path.startsWith("/api")) {
-      return next();
-    }
-    // Gửi về index.html cho SPA routing
-    res.sendFile(path.join(frontendDistPath, "index.html"), (err) => {
-      if (err) {
-        next(err);
+  // Kiểm tra xem thư mục dist có tồn tại không
+  try {
+    app.use(express.static(frontendDistPath));
+    console.log(`📁 Serving static files from: ${frontendDistPath}`);
+
+    // Catch-all handler: gửi về index.html cho mọi route không phải API
+    app.use((req, res, next) => {
+      // Bỏ qua các route API
+      if (req.path.startsWith("/api")) {
+        return next();
       }
+      // Gửi về index.html cho SPA routing
+      res.sendFile(path.join(frontendDistPath, "index.html"), (err) => {
+        if (err) {
+          console.error("Error sending index.html:", err);
+          next(err);
+        }
+      });
     });
-  });
+  } catch (error) {
+    console.warn("⚠️  Frontend dist folder not found. API only mode.");
+  }
 }
 
 // Start server ngay cả khi chưa kết nối MongoDB (để test API)

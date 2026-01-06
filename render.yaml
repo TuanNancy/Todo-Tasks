@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: todo-app-backend
+    env: node
+    buildCommand: npm install && npm install --prefix frontend && npm install --prefix backend && npm run build --prefix frontend
+    startCommand: npm run start --prefix backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGO_URI
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+

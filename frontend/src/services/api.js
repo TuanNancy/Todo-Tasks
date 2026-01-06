@@ -1,8 +1,24 @@
 import axios from "axios";
 
-// Sử dụng environment variable hoặc fallback về localhost cho development
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5001/api/tasks";
+// Sử dụng environment variable hoặc tự động detect API URL
+// Trong production (deployed), API sẽ ở cùng domain với frontend
+// Trong development, sử dụng localhost:5001
+const getApiBaseUrl = () => {
+  // Nếu có VITE_API_URL được set, dùng nó
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  // Nếu đang ở production (deployed), API ở cùng domain
+  if (import.meta.env.PROD) {
+    return "/api/tasks";
+  }
+
+  // Development: dùng localhost
+  return "http://localhost:5001/api/tasks";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
