@@ -1,0 +1,21 @@
+{
+  "name": "todo-appx",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/TuanNancy/Todo-Tasks#readme",
+  "bugs": {
+    "url": "https://github.com/TuanNancy/Todo-Tasks/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TuanNancy/Todo-Tasks.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm install --prefix frontend && npm install --prefix backend && npm run build --prefix frontend",
+    "start": "npm run start --prefix backend"
+  }
+}
