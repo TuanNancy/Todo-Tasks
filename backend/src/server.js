@@ -14,15 +14,32 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // CORS configuration - luôn bật để frontend có thể gọi API
-app.use(
-  cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? process.env.FRONTEND_URL || "*"
-        : "http://localhost:5173",
-    credentials: true,
-  })
-);
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Cho phép requests không có origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      "http://localhost:5173", // Vite dev server
+      "http://localhost:3000", // Alternative dev port
+      process.env.FRONTEND_URL, // Production URL
+    ].filter(Boolean);
+
+    if (
+      process.env.NODE_ENV === "development" ||
+      allowedOrigins.includes(origin)
+    ) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Cho phép tất cả trong development
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
@@ -52,11 +69,19 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-connectDB()
-  .then(() => {
-    app.listen(port, () => console.log(`server bắt đầu ở cổng: ${port}!`));
-  })
-  .catch((error) => {
-    console.error("Lỗi khi kết nối đến MongoDB", error);
-    process.exit(1);
-  });
+// Start server ngay cả khi chưa kết nối MongoDB (để test API)
+app.listen(port, () => {
+  console.log(`🚀 Server đang chạy ở cổng: ${port}!`);
+  console.log(`📡 API endpoint: http://localhost:${port}/api/tasks`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+
+  // Kết nối MongoDB
+  connectDB()
+    .then(() => {
+      console.log("✅ Kết nối MongoDB thành công!");
+    })
+    .catch((error) => {
+      console.error("❌ Lỗi khi kết nối đến MongoDB:", error.message);
+      console.log("⚠️  Server vẫn chạy nhưng không thể lưu dữ liệu!");
+    });
+});
