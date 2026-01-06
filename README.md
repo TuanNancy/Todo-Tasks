@@ -112,8 +112,6 @@ npm start
 
 ## 🌐 Deployment
 
-Xem file [DEPLOYMENT.md](./DEPLOYMENT.md) để biết hướng dẫn chi tiết deploy lên Render.
-
 ### Quick Deploy trên Render:
 
 1. Push code lên GitHub
