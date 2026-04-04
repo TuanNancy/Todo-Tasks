@@ -3,7 +3,9 @@ dotenv.config();
 
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import taskRoute from "./routes/tasksRouters.js";
+import authRoute from "./routes/authRoutes.js";
 import connectDB from "./config/db.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -13,25 +15,21 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// CORS configuration - luôn bật để frontend có thể gọi API
+// CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // Cho phép requests không có origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
-      "http://localhost:5173", // Vite dev server
-      "http://localhost:3000", // Alternative dev port
-      process.env.FRONTEND_URL, // Production URL
+      "http://localhost:5173",
+      "http://localhost:3000",
+      process.env.FRONTEND_URL,
     ].filter(Boolean);
 
-    if (
-      process.env.NODE_ENV === "development" ||
-      allowedOrigins.includes(origin)
-    ) {
+    if (process.env.NODE_ENV === "development" || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(null, true); // Cho phép tất cả trong development
+      callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true,
@@ -40,12 +38,13 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-
 app.use(express.json());
+app.use(cookieParser());
 
 const port = process.env.PORT || 5001;
 
 // API routes
+app.use("/api/auth", authRoute);
 app.use("/api/tasks", taskRoute);
 
 // Serve static files và SPA routing cho production

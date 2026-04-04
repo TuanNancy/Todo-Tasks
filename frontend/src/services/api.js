@@ -1,21 +1,15 @@
 import axios from "axios";
 
-// Sử dụng environment variable hoặc tự động detect API URL
-// Trong production (deployed), API sẽ ở cùng domain với frontend
-// Trong development, sử dụng localhost:5001
 const getApiBaseUrl = () => {
-  // Nếu có VITE_API_URL được set, dùng nó
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
 
-  // Nếu đang ở production (deployed), API ở cùng domain
   if (import.meta.env.PROD) {
-    return "/api/tasks";
+    return "/api";
   }
 
-  // Development: dùng localhost
-  return "http://localhost:5001/api/tasks";
+  return "http://localhost:5001/api";
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -25,13 +19,39 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 10000, // 10 seconds timeout
+  timeout: 10000,
+  withCredentials: true,
 });
 
-// Get all tasks
-export const getAllTasks = async () => {
+// Auth
+export const register = async (data) => {
+  const response = await api.post("/auth/register", data);
+  return response.data;
+};
+
+export const login = async (data) => {
+  const response = await api.post("/auth/login", data);
+  return response.data;
+};
+
+export const logout = async () => {
+  const response = await api.post("/auth/logout");
+  return response.data;
+};
+
+export const getMe = async () => {
+  const response = await api.get("/auth/me");
+  return response.data;
+};
+
+// Tasks
+export const getAllTasks = async (page = 1, limit = 5, filter = "all") => {
   try {
-    const response = await api.get("/");
+    const params = new URLSearchParams({ page, limit });
+    if (filter !== "all") {
+      params.append("status", filter);
+    }
+    const response = await api.get(`/tasks?${params.toString()}`);
     return response.data;
   } catch (error) {
     throw new Error(
@@ -40,10 +60,9 @@ export const getAllTasks = async () => {
   }
 };
 
-// Create a new task
 export const createTask = async (title) => {
   try {
-    const response = await api.post("/", { title });
+    const response = await api.post("/tasks", { title });
     return response.data;
   } catch (error) {
     throw new Error(
@@ -52,10 +71,9 @@ export const createTask = async (title) => {
   }
 };
 
-// Update a task
 export const updateTask = async (id, data) => {
   try {
-    const response = await api.put(`/${id}`, data);
+    const response = await api.put(`/tasks/${id}`, data);
     return response.data;
   } catch (error) {
     throw new Error(
@@ -64,13 +82,23 @@ export const updateTask = async (id, data) => {
   }
 };
 
-// Delete a task
 export const deleteTask = async (id) => {
   try {
-    const response = await api.delete(`/${id}`);
+    const response = await api.delete(`/tasks/${id}`);
     return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.message || "Lỗi khi xóa công việc");
+  }
+};
+
+export const getTaskCounts = async () => {
+  try {
+    const response = await api.get("/tasks/counts");
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || "Lỗi khi lấy thống kê công việc"
+    );
   }
 };
 

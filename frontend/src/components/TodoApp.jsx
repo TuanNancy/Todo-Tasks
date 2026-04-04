@@ -1,113 +1,79 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import {
-  Plus,
-  Trash2,
-  Edit2,
-  Check,
-  X,
-  Loader2,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  Circle,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Loader2, LogOut, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import AnimatedShaderBackground from "@/components/ui/animated-shader-background";
+import TaskForm from "@/components/TaskForm";
+import FilterBar from "@/components/FilterBar";
+import TaskItem from "@/components/TaskItem";
+import Pagination from "@/components/Pagination";
 import {
   getAllTasks,
   createTask,
   updateTask,
   deleteTask,
+  getTaskCounts,
 } from "@/services/api";
+import { useAuth } from "@/context/AuthContext";
 
-// Format date helper
-const formatDate = (dateString) => {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffTime = Math.abs(now - date);
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-  // Format options
-  const options = {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  };
-
-  if (diffDays === 0) {
-    // Hôm nay
-    return `Hôm nay, ${date.toLocaleTimeString("vi-VN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`;
-  } else if (diffDays === 1) {
-    // Hôm qua
-    return `Hôm qua, ${date.toLocaleTimeString("vi-VN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`;
-  } else if (diffDays < 7) {
-    // Trong tuần này
-    return `${diffDays} ngày trước`;
-  } else {
-    // Lâu hơn
-    return date.toLocaleDateString("vi-VN", options);
-  }
-};
+const ITEMS_PER_PAGE = 5;
 
 const TodoApp = () => {
+  const { user, logout } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
-  const [filter, setFilter] = useState("all"); // 'all', 'active', 'completed'
+  const [filter, setFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [pagination, setPagination] = useState({});
+  const [counts, setCounts] = useState({ total: 0, active: 0, completed: 0 });
 
-  // Load tasks khi component mount
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getAllTasks();
-      setTasks(data);
+      const data = await getAllTasks(currentPage, ITEMS_PER_PAGE, filter);
+      setTasks(data.tasks);
+      setPagination(data.pagination);
     } catch (error) {
       toast.error(error.message || "Không thể tải danh sách công việc");
       console.error("Error fetching tasks:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, filter]);
 
-  // Thêm task mới
-  const handleAddTask = async () => {
-    if (!newTaskTitle.trim()) {
-      toast.error("Vui lòng nhập tiêu đề công việc");
-      return;
-    }
-
+  const fetchCounts = useCallback(async () => {
     try {
-      const newTask = await createTask(newTaskTitle.trim());
-      setTasks([newTask, ...tasks]);
-      setNewTaskTitle("");
+      const data = await getTaskCounts();
+      setCounts(data);
+    } catch (error) {
+      console.error("Error fetching counts:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTasks();
+    fetchCounts();
+  }, [fetchTasks, fetchCounts]);
+
+  const handleAddTask = async (title) => {
+    try {
+      setActionLoading(true);
+      await createTask(title);
       toast.success("Đã thêm công việc mới");
+      fetchTasks();
+      fetchCounts();
     } catch (error) {
       toast.error(error.message || "Không thể thêm công việc");
       console.error("Error creating task:", error);
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  // Toggle status (active/completed)
   const handleToggleStatus = async (id) => {
     const task = tasks.find((t) => t._id === id);
     if (!task) return;
@@ -118,7 +84,6 @@ const TodoApp = () => {
       completedAt: newStatus === "completed" ? new Date() : null,
     };
 
-    // Optimistic update - cập nhật UI ngay lập tức
     const optimisticTask = {
       ...task,
       status: newStatus,
@@ -127,25 +92,21 @@ const TodoApp = () => {
     setTasks(tasks.map((t) => (t._id === id ? optimisticTask : t)));
 
     try {
-      const updatedTask = await updateTask(id, updateData);
-      // Cập nhật lại với data từ server để đảm bảo sync
-      setTasks(tasks.map((t) => (t._id === id ? updatedTask : t)));
+      await updateTask(id, updateData);
       toast.success("Đã cập nhật trạng thái");
+      fetchCounts();
     } catch (error) {
-      // Rollback nếu có lỗi
       setTasks(tasks.map((t) => (t._id === id ? task : t)));
       toast.error(error.message || "Không thể cập nhật trạng thái");
       console.error("Error updating task status:", error);
     }
   };
 
-  // Bắt đầu chỉnh sửa
   const handleStartEdit = (task) => {
     setEditingId(task._id);
     setEditingTitle(task.title);
   };
 
-  // Lưu chỉnh sửa
   const handleSaveEdit = async (id) => {
     if (!editingTitle.trim()) {
       toast.error("Tiêu đề không được để trống");
@@ -164,56 +125,31 @@ const TodoApp = () => {
     }
   };
 
-  // Hủy chỉnh sửa
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditingTitle("");
   };
 
-  // Xóa task
   const handleDeleteTask = async (id) => {
     try {
       await deleteTask(id);
-      setTasks(tasks.filter((task) => task._id !== id));
       toast.success("Đã xóa công việc");
-      // Reset về trang 1 nếu trang hiện tại không còn items
-      const filtered = getFilteredTasks();
-      const maxPage = Math.ceil(filtered.length / itemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
-      }
+      fetchTasks();
+      fetchCounts();
     } catch (error) {
       toast.error(error.message || "Không thể xóa công việc");
       console.error("Error deleting task:", error);
     }
   };
 
-  // Filter tasks
-  const getFilteredTasks = () => {
-    switch (filter) {
-      case "active":
-        return tasks.filter((task) => task.status === "active");
-      case "completed":
-        return tasks.filter((task) => task.status === "completed");
-      default:
-        return tasks;
-    }
+  const handleFilterChange = (newFilter) => {
+    setFilter(newFilter);
+    setCurrentPage(1);
   };
 
-  // Pagination
-  const filteredTasks = getFilteredTasks();
-  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedTasks = filteredTasks.slice(startIndex, endIndex);
-
-  // Reset page khi filter thay đổi
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filter]);
-
-  const activeTasks = tasks.filter((task) => task.status === "active");
-  const completedTasks = tasks.filter((task) => task.status === "completed");
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+  };
 
   if (loading) {
     return (
@@ -228,37 +164,40 @@ const TodoApp = () => {
 
   return (
     <div className="min-h-screen relative py-8 px-4">
-      {/* Animated Shader Background */}
       <AnimatedShaderBackground />
 
-      {/* Content overlay with semi-transparent background for readability */}
       <div className="relative z-10 max-w-2xl mx-auto">
         <Card className="mb-6 bg-[hsl(var(--card))]/95 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center">
-              📝 Todo App
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-3xl font-bold text-center flex-1">
+                📝 Todo App
+              </CardTitle>
+              {user && (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 text-sm text-[hsl(var(--muted-foreground))]">
+                    <User className="h-4 w-4" />
+                    <span>{user.username}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={logout}
+                    title="Đăng xuất"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            {/* Form thêm task mới */}
-            <div className="flex gap-2 mb-6">
-              <Input
-                placeholder="Nhập công việc mới..."
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleAddTask()}
-                className="flex-1"
-              />
-              <Button onClick={handleAddTask} size="icon">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+            <TaskForm onAddTask={handleAddTask} loading={actionLoading} />
 
-            {/* Thống kê */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-2 gap-4 mt-6 mb-6">
               <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {activeTasks.length}
+                  {counts.active}
                 </div>
                 <div className="text-sm text-blue-600 dark:text-blue-400">
                   Đang làm
@@ -266,7 +205,7 @@ const TodoApp = () => {
               </div>
               <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
                 <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {completedTasks.length}
+                  {counts.completed}
                 </div>
                 <div className="text-sm text-green-600 dark:text-green-400">
                   Hoàn thành
@@ -274,38 +213,15 @@ const TodoApp = () => {
               </div>
             </div>
 
-            {/* Filter Buttons */}
-            <div className="flex gap-2 mb-4">
-              <Button
-                variant={filter === "all" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilter("all")}
-                className="flex-1"
-              >
-                Tất cả ({tasks.length})
-              </Button>
-              <Button
-                variant={filter === "active" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilter("active")}
-                className="flex-1"
-              >
-                Đang làm ({activeTasks.length})
-              </Button>
-              <Button
-                variant={filter === "completed" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilter("completed")}
-                className="flex-1"
-              >
-                Hoàn thành ({completedTasks.length})
-              </Button>
-            </div>
+            <FilterBar
+              filter={filter}
+              counts={counts}
+              onFilterChange={handleFilterChange}
+            />
           </CardContent>
         </Card>
 
-        {/* Danh sách tasks */}
-        {paginatedTasks.length > 0 && (
+        {tasks.length > 0 && (
           <Card className="mb-6 bg-[hsl(var(--card))]/95 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-xl">
@@ -315,158 +231,38 @@ const TodoApp = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {paginatedTasks.map((task) => (
-                <div
+              {tasks.map((task) => (
+                <TaskItem
                   key={task._id}
-                  className={`flex items-center gap-3 p-3 border border-[hsl(var(--border))] rounded-lg transition-all ${
-                    task.status === "completed"
-                      ? "opacity-75 hover:opacity-100"
-                      : "hover:bg-[hsl(var(--accent))]"
-                  }`}
-                >
-                  {/* Button đánh dấu hoàn thành */}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleToggleStatus(task._id)}
-                    className={`${
-                      task.status === "completed"
-                        ? "text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300"
-                        : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                    }`}
-                  >
-                    {task.status === "completed" ? (
-                      <Check className="h-5 w-5" />
-                    ) : (
-                      <Circle className="h-5 w-5" />
-                    )}
-                  </Button>
-                  {editingId === task._id ? (
-                    <div className="flex-1 flex gap-2">
-                      <Input
-                        value={editingTitle}
-                        onChange={(e) => setEditingTitle(e.target.value)}
-                        onKeyPress={(e) =>
-                          e.key === "Enter" && handleSaveEdit(task._id)
-                        }
-                        className="flex-1"
-                        autoFocus
-                      />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleSaveEdit(task._id)}
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={handleCancelEdit}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex-1 flex flex-col gap-1">
-                        <span
-                          className={`${
-                            task.status === "completed" ? "line-through" : ""
-                          } ${
-                            task.status === "completed"
-                              ? "text-[hsl(var(--muted-foreground))]"
-                              : ""
-                          }`}
-                        >
-                          {task.title}
-                        </span>
-                        <div className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>Tạo: {formatDate(task.createdAt)}</span>
-                          </div>
-                          {task.completedAt && (
-                            <>
-                              <span>•</span>
-                              <span>{formatDate(task.completedAt)}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleStartEdit(task)}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleDeleteTask(task._id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </>
-                  )}
-                </div>
+                  task={task}
+                  editingId={editingId}
+                  editingTitle={editingTitle}
+                  onToggle={handleToggleStatus}
+                  onStartEdit={handleStartEdit}
+                  onSaveEdit={handleSaveEdit}
+                  onCancelEdit={handleCancelEdit}
+                  onDelete={handleDeleteTask}
+                  onEditTitleChange={setEditingTitle}
+                />
               ))}
             </CardContent>
           </Card>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {pagination.totalPages > 1 && (
           <Card className="bg-[hsl(var(--card))]/95 backdrop-blur-sm">
             <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                  Trang {currentPage} / {totalPages} ({filteredTasks.length}{" "}
-                  công việc)
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.max(1, prev - 1))
-                    }
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                    (page) => (
-                      <Button
-                        key={page}
-                        variant={currentPage === page ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(page)}
-                        className="min-w-[40px]"
-                      >
-                        {page}
-                      </Button>
-                    )
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-                    }
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <Pagination
+                currentPage={pagination.currentPage || currentPage}
+                totalPages={pagination.totalPages || 1}
+                totalTasks={pagination.totalTasks || 0}
+                onPageChange={handlePageChange}
+              />
             </CardContent>
           </Card>
         )}
 
-        {/* Empty state */}
-        {filteredTasks.length === 0 && (
+        {tasks.length === 0 && (
           <Card className="bg-[hsl(var(--card))]/95 backdrop-blur-sm">
             <CardContent className="py-12 text-center">
               <p className="text-[hsl(var(--muted-foreground))]">
