@@ -42,10 +42,9 @@ const RegisterPage = () => {
 
     try {
       setLoading(true);
-      const data = await register({ username, email, password });
-      setUserFromAuth(data.user);
-      toast.success("Đăng ký thành công");
-      navigate("/");
+      await register({ username, email, password });
+      toast.success("Đăng ký thành công! Vui lòng đăng nhập");
+      navigate("/login");
     } catch (error) {
       toast.error(error.message || "Đăng ký thất bại");
     } finally {
